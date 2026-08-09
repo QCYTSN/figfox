@@ -1,9 +1,9 @@
-# AutoDraftman public site
+# FigFox public site
 
-This repository is the GitHub Pages deployment mirror for AutoDraftman.
+This repository is the GitHub Pages deployment mirror for FigFox.
 It publishes the generated static site at:
 
-`https://qcytsn.github.io/autodraftman/`
+`https://qcytsn.github.io/figfox/`
 
 ## Source of truth
 
@@ -15,7 +15,7 @@ The `site/` directory is the deployable output built from that product source
 with its GitHub Pages base path. A commit to `main` deploys `site/` directly.
 
 The older root-level frontend files are retained as historical material only and
-are no longer part of the Pages build.
+are no longer part of the Pages build. Public FigFox output lives only in `site/`.
 
 ## Update procedure
 
