@@ -1,4 +1,4 @@
-name: Deploy AutoDraftman to GitHub Pages
+name: Deploy FigFox to GitHub Pages
 
 on:
   push:
