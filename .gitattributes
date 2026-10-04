@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep published experiment SVGs identical to the verified asset manifest.
+site/assets/demo/cases/**/*.svg binary
