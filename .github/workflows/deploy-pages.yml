@@ -4,6 +4,12 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      source_revision:
+        description: "Optional reviewed product commit (full SHA); leave empty to publish site/"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -21,8 +27,50 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout deployment mirror
+        if: ${{ !inputs.source_revision }}
         uses: actions/checkout@v7
+
+      - name: Validate product revision
+        if: ${{ inputs.source_revision }}
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "A full product commit SHA is required."; exit 1; }
+
+      - name: Checkout reviewed product source
+        if: ${{ inputs.source_revision }}
+        uses: actions/checkout@v7
+        with:
+          repository: QCYTSN/autodraftman-product
+          ref: ${{ inputs.source_revision }}
+          path: product-source
+          persist-credentials: false
+
+      - name: Set up Node
+        if: ${{ inputs.source_revision }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: product-source/frontend/package-lock.json
+
+      - name: Build reviewed product for Pages
+        if: ${{ inputs.source_revision }}
+        working-directory: product-source/frontend
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          npm ci
+          npm run build:pages
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          writeFileSync('dist/_release.json', JSON.stringify({
+            sourceRepository: 'QCYTSN/autodraftman-product',
+            sourceRevision: process.env.SOURCE_REVISION,
+            builtAt: new Date().toISOString()
+          }, null, 2) + '\n');
+          NODE
 
       - name: Configure Pages
         uses: actions/configure-pages@v6
@@ -32,8 +80,9 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: ./site
+          path: ${{ inputs.source_revision && './product-source/frontend/dist' || './site' }}
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
