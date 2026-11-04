@@ -1,15 +1,12 @@
-name: Deploy FigFox to GitHub Pages
+name: Deploy reviewed FigFox source to Pages
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
     inputs:
       source_revision:
-        description: "Optional reviewed product commit (full SHA); leave empty to publish site/"
+        description: Reviewed QCYTSN/autodraftman-product commit (full 40-character SHA)
         type: string
-        required: false
-        default: ""
+        required: true
 
 permissions:
   contents: read
@@ -18,7 +15,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -27,48 +24,42 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout deployment mirror
-        if: ${{ !inputs.source_revision }}
-        uses: actions/checkout@v7
-
-      - name: Validate product revision
-        if: ${{ inputs.source_revision }}
+      - name: Validate source revision
         env:
           SOURCE_REVISION: ${{ inputs.source_revision }}
         run: |
-          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "A full product commit SHA is required."; exit 1; }
+          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "A full reviewed source SHA is required."; exit 1; }
 
       - name: Checkout reviewed product source
-        if: ${{ inputs.source_revision }}
         uses: actions/checkout@v7
         with:
           repository: QCYTSN/autodraftman-product
           ref: ${{ inputs.source_revision }}
-          path: product-source
           persist-credentials: false
 
       - name: Set up Node
-        if: ${{ inputs.source_revision }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: product-source/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build reviewed product for Pages
-        if: ${{ inputs.source_revision }}
-        working-directory: product-source/frontend
+      - name: Build and identify the checked-out source
+        working-directory: frontend
         env:
           SOURCE_REVISION: ${{ inputs.source_revision }}
         run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
           npm ci
           npm run build:pages
           node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
           import { writeFileSync } from 'node:fs';
+          const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          if (revision !== process.env.SOURCE_REVISION) throw new Error('Source SHA mismatch');
           writeFileSync('dist/_release.json', JSON.stringify({
-            sourceRepository: 'QCYTSN/autodraftman-product',
-            sourceRevision: process.env.SOURCE_REVISION,
-            builtAt: new Date().toISOString()
+            sourceRepository: 'QCYTSN/autodraftman-product', sourceRevision: revision,
+            builtAt: new Date().toISOString(), workflowRun: process.env.GITHUB_RUN_ID
           }, null, 2) + '\n');
           NODE
 
@@ -77,12 +68,11 @@ jobs:
         with:
           enablement: true
 
-      - name: Upload Pages artifact
+      - name: Upload the source build
         uses: actions/upload-pages-artifact@v5
         with:
-          path: ${{ inputs.source_revision && './product-source/frontend/dist' || './site' }}
+          path: frontend/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-
